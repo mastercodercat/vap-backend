@@ -70,4 +70,37 @@ export class DeveloperService {
 
     return developer;
   }
+
+  async updateDeveloper(
+    id: string,
+    userId: string,
+    updateData: Partial<Developer>,
+  ): Promise<Developer> {
+    const developer = await this.getDeveloperById(id, userId);
+
+    // Update the developer with new data
+    Object.assign(developer, updateData);
+
+    return this.developerRepository.save(developer);
+  }
+
+  async updateDeveloperWithResume(
+    id: string,
+    userId: string,
+    updateData: Partial<Developer>,
+    resumeFile?: Express.Multer.File,
+  ): Promise<Developer> {
+    const developer = await this.getDeveloperById(id, userId);
+
+    // Handle resume file upload if provided
+    if (resumeFile) {
+      const resumeUrl = await this.saveResumeFile(resumeFile);
+      updateData.link = resumeUrl;
+    }
+
+    // Update the developer with new data
+    Object.assign(developer, updateData);
+
+    return this.developerRepository.save(developer);
+  }
 }
