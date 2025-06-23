@@ -9,6 +9,7 @@ import { Resume } from './entities/resume.entity';
 import { getDatabaseConfig } from './config/database.config';
 import { AuthModule } from './auth/auth.module';
 import { DeveloperModule } from './developer/developer.module';
+import { ResumeModule } from './resume/resume.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { DeveloperModule } from './developer/developer.module';
     TypeOrmModule.forFeature([User, Developer, Resume]),
     AuthModule,
     DeveloperModule,
+    ResumeModule,
   ],
   controllers: [AppController],
   providers: [AppService],
