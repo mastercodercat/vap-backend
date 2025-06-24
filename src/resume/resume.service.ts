@@ -24,6 +24,7 @@ export class ResumeService {
   async createAutomaticResume(
     jobDescription: string,
     developerId: string,
+    docType: 'pdf' | 'docx',
   ): Promise<Resume> {
     // Verify developer exists
     const developer = await this.developerRepository.findOne({
@@ -34,16 +35,24 @@ export class ResumeService {
       throw new NotFoundException('Developer not found');
     }
 
+    // Extract title and skills from job description
+    const { title, skills } =
+      await DocxUtils.extractTitleAndSkillsFromJobDescription(jobDescription);
+
     // Generate automatic resume using your script
-    const resumeUrl = await this.generateAutomaticResume(
+    const { resumeUrl, pdfUrl } = await this.generateAutomaticResume(
       jobDescription,
       developer,
+      docType,
     );
 
     // Create resume record
     const resume = this.resumeRepository.create({
       jobDescription,
+      title,
+      skills,
       resumeUrl,
+      pdfUrl,
       developerId,
     });
 
@@ -53,7 +62,8 @@ export class ResumeService {
   private async generateAutomaticResume(
     jobDescription: string,
     developer: Developer,
-  ): Promise<string> {
+    docType: 'pdf' | 'docx',
+  ): Promise<{ resumeUrl: string; pdfUrl: string | undefined }> {
     // Create uploads directory if it doesn't exist
     const uploadsDir = path.join(process.cwd(), 'uploads', 'generated');
     if (!fs.existsSync(uploadsDir)) {
@@ -73,6 +83,7 @@ export class ResumeService {
     const finished = await DocxUtils.generateResume(
       jobDescription,
       resumePath,
+      docType === 'pdf',
       docxPath,
       pdfPath,
     );
@@ -81,7 +92,17 @@ export class ResumeService {
       throw new Error('Failed to generate resume');
     }
 
-    return `/uploads/generated/${fileName}`;
+    if (docType === 'pdf') {
+      return {
+        resumeUrl: `/uploads/generated/${docxName}`,
+        pdfUrl: `/uploads/generated/${pdfName}`,
+      };
+    } else {
+      return {
+        resumeUrl: `/uploads/generated/${docxName}`,
+        pdfUrl: undefined,
+      };
+    }
   }
 
   async getResumesByDeveloperId(developerId: string): Promise<Resume[]> {
@@ -101,5 +122,12 @@ export class ResumeService {
     }
 
     return resume;
+  }
+
+  async getAllResumes(): Promise<Resume[]> {
+    return this.resumeRepository.find({
+      relations: ['developer'],
+      order: { createdAt: 'DESC' },
+    });
   }
 }

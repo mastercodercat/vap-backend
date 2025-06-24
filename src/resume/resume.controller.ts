@@ -31,20 +31,57 @@ export class ResumeController {
   @ApiResponse({ status: 404, description: 'Developer not found' })
   async generateAutomaticResume(
     @Request() req,
-    @Body() body: { jobDescription: string; developerId: string },
+    @Body()
+    body: {
+      jobDescription: string;
+      developerId: string;
+      docType: 'pdf' | 'docx';
+    },
   ) {
     const resume = await this.resumeService.createAutomaticResume(
       body.jobDescription,
       body.developerId,
+      body.docType,
     );
 
     return {
       id: resume.id,
       jobDescription: resume.jobDescription,
+      title: resume.title,
+      skills: resume.skills,
       resumeUrl: resume.resumeUrl,
+      pdfUrl: resume.pdfUrl,
       developerId: resume.developerId,
       createdAt: resume.createdAt,
     };
+  }
+
+  @Get()
+  @ApiOperation({ summary: 'Get all resumes' })
+  @ApiResponse({
+    status: 200,
+    description: 'All resumes retrieved successfully',
+  })
+  async getAllResumes() {
+    const resumes = await this.resumeService.getAllResumes();
+
+    return resumes.map((resume) => ({
+      id: resume.id,
+      jobDescription: resume.jobDescription,
+      title: resume.title,
+      skills: resume.skills,
+      resumeUrl: resume.resumeUrl,
+      pdfUrl: resume.pdfUrl,
+      developerId: resume.developerId,
+      createdAt: resume.createdAt,
+      developer: resume.developer
+        ? {
+            id: resume.developer.id,
+            name: resume.developer.name,
+            link: resume.developer.link,
+          }
+        : null,
+    }));
   }
 
   @Get('developer/:developerId')
@@ -57,6 +94,8 @@ export class ResumeController {
     return resumes.map((resume) => ({
       id: resume.id,
       jobDescription: resume.jobDescription,
+      title: resume.title,
+      skills: resume.skills,
       resumeUrl: resume.resumeUrl,
       developerId: resume.developerId,
       createdAt: resume.createdAt,
@@ -73,7 +112,10 @@ export class ResumeController {
     return {
       id: resume.id,
       jobDescription: resume.jobDescription,
+      title: resume.title,
+      skills: resume.skills,
       resumeUrl: resume.resumeUrl,
+      pdfUrl: resume.pdfUrl,
       developerId: resume.developerId,
       createdAt: resume.createdAt,
       developer: resume.developer

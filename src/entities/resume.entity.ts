@@ -17,8 +17,17 @@ export class Resume {
   @Column({ type: 'text' })
   jobDescription: string;
 
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  title: string;
+
+  @Column({ type: 'text', nullable: true })
+  skills: string;
+
   @Column({ type: 'varchar', length: 500 })
   resumeUrl: string;
+
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  pdfUrl: string;
 
   @Column({ type: 'uuid' })
   developerId: string;

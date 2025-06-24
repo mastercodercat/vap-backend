@@ -181,6 +181,7 @@ Please output the full rewritten resume. Return **only** valid JSON. Return them
   static async generateResume(
     jobDescription: string,
     resumePath: string,
+    isPdf: boolean,
     docxPath: string,
     pdfPath: string,
   ): Promise<boolean> {
@@ -239,8 +240,81 @@ Please output the full rewritten resume. Return **only** valid JSON. Return them
     };
 
     await DocxUtils.createDocxFile(formattedData, resumeFilePath, docxPath);
-    await DocxUtils.generatePDF(docxPath, pdfPath);
+    if (isPdf) {
+      await DocxUtils.generatePDF(docxPath, pdfPath);
+    }
 
     return true;
+  }
+
+  static async extractTitleAndSkillsFromJobDescription(
+    jobDescription: string,
+  ): Promise<{ title: string; skills: string }> {
+    const apiKey = DocxUtils.getGroqApiKey();
+
+    const prompt = `
+--- JOB DESCRIPTION ---
+${jobDescription}
+
+Please analyze this job description and extract:
+1. The job title/position
+2. The key technical skills and requirements
+
+Return the result as a JSON object with exactly these fields:
+- title: The job title/position (string)
+- skills: A comma-separated list of key technical skills (string)
+
+Example response format:
+{
+  "title": "Senior Software Engineer",
+  "skills": "JavaScript, React, Node.js, TypeScript, AWS, Docker, Kubernetes"
+}
+
+Please be concise and focus on the most important technical skills mentioned in the job description.
+`;
+
+    try {
+      const res = await axios.post(
+        'https://api.groq.com/openai/v1/chat/completions',
+        {
+          model: 'llama3-70b-8192',
+          messages: [
+            {
+              role: 'system',
+              content:
+                'You are a job description analyzer. Extract the job title and key technical skills from job descriptions.',
+            },
+            {
+              role: 'user',
+              content: prompt,
+            },
+          ],
+          temperature: 0.3,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+
+      const jsonData = DocxUtils.extractJSON(
+        res.data.choices[0].message.content,
+      );
+      console.log('✅ Title and skills extracted successfully');
+
+      return {
+        title: jsonData.title || 'Unknown Position',
+        skills: jsonData.skills || 'No skills specified',
+      };
+    } catch (error) {
+      console.error('❌ Error extracting title and skills:', error.message);
+      // Return default values if extraction fails
+      return {
+        title: 'Unknown Position',
+        skills: 'No skills specified',
+      };
+    }
   }
 }

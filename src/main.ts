@@ -7,6 +7,22 @@ import { join } from 'path';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // Enable CORS
+  app.enableCors({
+    origin: true, // Allow all origins
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: [
+      'Origin',
+      'X-Requested-With',
+      'Content-Type',
+      'Accept',
+      'Authorization',
+      'X-API-Key',
+    ],
+    credentials: true,
+  });
+
   app.useGlobalPipes(new ValidationPipe());
 
   // Serve static files from uploads directory
