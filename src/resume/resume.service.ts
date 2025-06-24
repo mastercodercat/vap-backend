@@ -130,4 +130,44 @@ export class ResumeService {
       order: { createdAt: 'DESC' },
     });
   }
+
+  async convertResumeToPdf(id: string): Promise<Resume> {
+    // Get the resume with developer info
+    const resume = await this.resumeRepository.findOne({
+      where: { id },
+      relations: ['developer'],
+    });
+
+    if (!resume) {
+      throw new NotFoundException('Resume not found');
+    }
+
+    // Check if PDF already exists
+    if (resume.pdfUrl) {
+      return resume; // PDF already exists, return as is
+    }
+
+    // Get the DOCX file path
+    const docxPath = path.join(
+      process.cwd(),
+      resume.resumeUrl.replace('/uploads/', 'uploads/'),
+    );
+
+    if (!fs.existsSync(docxPath)) {
+      throw new NotFoundException('DOCX file not found');
+    }
+
+    // Generate PDF file path
+    const fileName = path.basename(docxPath, '.docx');
+    const pdfName = `${fileName}.pdf`;
+    const pdfPath = path.join(path.dirname(docxPath), pdfName);
+
+    // Convert DOCX to PDF
+    await DocxUtils.generatePDF(docxPath, pdfPath);
+
+    // Update the resume with PDF URL
+    resume.pdfUrl = `/uploads/generated/${pdfName}`;
+
+    return this.resumeRepository.save(resume);
+  }
 }

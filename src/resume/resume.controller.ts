@@ -102,6 +102,28 @@ export class ResumeController {
     }));
   }
 
+  @Post(':id/convert-to-pdf')
+  @ApiOperation({ summary: 'Convert existing DOCX resume to PDF' })
+  @ApiResponse({
+    status: 200,
+    description: 'Resume converted to PDF successfully',
+  })
+  @ApiResponse({ status: 404, description: 'Resume not found' })
+  async convertResumeToPdf(@Param('id') id: string) {
+    const resume = await this.resumeService.convertResumeToPdf(id);
+
+    return {
+      id: resume.id,
+      jobDescription: resume.jobDescription,
+      title: resume.title,
+      skills: resume.skills,
+      resumeUrl: resume.resumeUrl,
+      pdfUrl: resume.pdfUrl,
+      developerId: resume.developerId,
+      createdAt: resume.createdAt,
+    };
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get a specific resume by ID' })
   @ApiResponse({ status: 200, description: 'Resume retrieved successfully' })
