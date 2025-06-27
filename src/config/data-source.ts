@@ -3,6 +3,8 @@ import { ConfigService } from '@nestjs/config';
 import { Resume } from '../entities/resume.entity';
 import { Developer } from '../entities/developer.entity';
 import { User } from '../entities/user.entity';
+import { Company } from '../entities/company.entity';
+import { Job } from '../entities/job.entity';
 
 const configService = new ConfigService();
 
@@ -13,7 +15,7 @@ export const AppDataSource = new DataSource({
   username: configService.get('DB_USERNAME', 'postgres'),
   password: configService.get('DB_PASSWORD', 'password'),
   database: configService.get('DB_NAME', 'vap'),
-  entities: [Resume, Developer, User],
+  entities: [Resume, Developer, User, Company, Job],
   migrations: [__dirname + '/../migrations/*{.ts,.js}'],
   synchronize: false,
   logging: configService.get('NODE_ENV') !== 'production',

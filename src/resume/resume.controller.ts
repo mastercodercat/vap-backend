@@ -46,7 +46,6 @@ export class ResumeController {
 
     return {
       id: resume.id,
-      jobDescription: resume.jobDescription,
       title: resume.title,
       skills: resume.skills,
       resumeUrl: resume.resumeUrl,
@@ -67,7 +66,6 @@ export class ResumeController {
 
     return resumes.map((resume) => ({
       id: resume.id,
-      jobDescription: resume.jobDescription,
       title: resume.title,
       skills: resume.skills,
       resumeUrl: resume.resumeUrl,
@@ -93,7 +91,6 @@ export class ResumeController {
 
     return resumes.map((resume) => ({
       id: resume.id,
-      jobDescription: resume.jobDescription,
       title: resume.title,
       skills: resume.skills,
       resumeUrl: resume.resumeUrl,
@@ -114,7 +111,6 @@ export class ResumeController {
 
     return {
       id: resume.id,
-      jobDescription: resume.jobDescription,
       title: resume.title,
       skills: resume.skills,
       resumeUrl: resume.resumeUrl,
@@ -133,7 +129,6 @@ export class ResumeController {
 
     return {
       id: resume.id,
-      jobDescription: resume.jobDescription,
       title: resume.title,
       skills: resume.skills,
       resumeUrl: resume.resumeUrl,

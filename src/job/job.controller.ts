@@ -24,6 +24,20 @@ export class JobController {
     return this.jobService.createJob(createJobDto);
   }
 
+  @Post('from-description')
+  async createJobFromDescription(
+    @Body() body: { jobDescription: string },
+  ): Promise<Job> {
+    return this.jobService.createJobFromDescription(body.jobDescription);
+  }
+
+  @Post('from-descriptions')
+  async createJobsFromDescriptions(
+    @Body() body: { jobDescriptions: string[] },
+  ): Promise<{ created: Job[]; existing: Job[] }> {
+    return this.jobService.createJobsFromDescriptions(body.jobDescriptions);
+  }
+
   @Get()
   async getAllJobs(): Promise<Job[]> {
     return this.jobService.getAllJobs();

@@ -3,9 +3,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Resume } from '../entities/resume.entity';
 import { Developer } from '../entities/developer.entity';
+import { Job } from '../entities/job.entity';
+import { JobService } from '../job/job.service';
 import { DocxUtils } from '../utils/docx.utils';
-import { ConfigService } from '@nestjs/config';
 import { FirebaseStorageService } from '../services/firebase-storage.service';
+import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -16,8 +18,11 @@ export class ResumeService {
     private readonly resumeRepository: Repository<Resume>,
     @InjectRepository(Developer)
     private readonly developerRepository: Repository<Developer>,
+    @InjectRepository(Job)
+    private readonly jobRepository: Repository<Job>,
     private readonly configService: ConfigService,
     private readonly firebaseStorageService: FirebaseStorageService,
+    private readonly jobService: JobService,
   ) {
     // Initialize DocxUtils with config service
     DocxUtils.initialize(this.configService);
@@ -38,8 +43,13 @@ export class ResumeService {
     }
 
     // Extract title and skills from job description
-    const { title, skills } =
-      await DocxUtils.extractTitleAndSkillsFromJobDescription(jobDescription);
+    const extractedInfo = await DocxUtils.extractJobInformation(jobDescription);
+
+    // Create job record from extracted information
+    const job = await this.jobService.createJobFromExtractedInfo({
+      ...extractedInfo,
+      jobDescription,
+    });
 
     // Generate automatic resume using your script
     const { resumeUrl, pdfUrl } = await this.generateAutomaticResume(
@@ -50,12 +60,12 @@ export class ResumeService {
 
     // Create resume record
     const resume = this.resumeRepository.create({
-      jobDescription,
-      title,
-      skills,
+      title: extractedInfo.title,
+      skills: extractedInfo.skills,
       resumeUrl,
       pdfUrl,
       developerId,
+      jobId: job.id,
     });
 
     return this.resumeRepository.save(resume);
@@ -126,13 +136,14 @@ export class ResumeService {
   async getResumesByDeveloperId(developerId: string): Promise<Resume[]> {
     return this.resumeRepository.find({
       where: { developerId },
+      relations: ['developer', 'job', 'job.company'],
     });
   }
 
   async getResumeById(id: string): Promise<Resume> {
     const resume = await this.resumeRepository.findOne({
       where: { id },
-      relations: ['developer'],
+      relations: ['developer', 'job', 'job.company'],
     });
 
     if (!resume) {
@@ -144,7 +155,7 @@ export class ResumeService {
 
   async getAllResumes(): Promise<Resume[]> {
     return this.resumeRepository.find({
-      relations: ['developer'],
+      relations: ['developer', 'job', 'job.company'],
       order: { createdAt: 'DESC' },
     });
   }

@@ -8,14 +8,12 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { Developer } from './developer.entity';
+import { Job } from './job.entity';
 
 @Entity('resumes')
 export class Resume {
   @PrimaryGeneratedColumn('uuid')
   id: string;
-
-  @Column({ type: 'text' })
-  jobDescription: string;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
   title: string;
@@ -32,9 +30,16 @@ export class Resume {
   @Column({ type: 'uuid' })
   developerId: string;
 
+  @Column({ type: 'uuid', nullable: true })
+  jobId: string;
+
   @ManyToOne(() => Developer, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'developerId' })
   developer: Developer;
+
+  @ManyToOne(() => Job, { onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'jobId' })
+  job: Job;
 
   @CreateDateColumn()
   createdAt: Date;

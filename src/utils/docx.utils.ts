@@ -441,28 +441,48 @@ Please output the full rewritten resume. Return **only** valid JSON. Return them
 
   static async extractTitleAndSkillsFromJobDescription(
     jobDescription: string,
-  ): Promise<{ title: string; skills: string }> {
+  ): Promise<{
+    title: string;
+    skills: string;
+    companyName: string;
+    companyDescription: string;
+    url: string;
+    source: string;
+  }> {
     const apiKey = DocxUtils.getGroqApiKey();
 
     const prompt = `
 --- JOB DESCRIPTION ---
 ${jobDescription}
 
-Please analyze this job description and extract:
+Please analyze this job description and extract the following information:
+
 1. The job title/position
 2. The key technical skills and requirements
+3. The company name (if you cannot find this, please use "Stealth")
+4. A brief description of the company (what they do, industry, etc.)
+5. The job posting URL (if mentioned)
+6. The source/platform where this job was posted (e.g., LinkedIn, Indeed, company website, etc.)
 
 Return the result as a JSON object with exactly these fields:
 - title: The job title/position (string)
 - skills: A comma-separated list of key technical skills (string)
+- companyName: The name of the company (string)
+- companyDescription: A brief description of what the company does (string)
+- url: The job posting URL if found, otherwise empty string (string)
+- source: The platform/source where this job was posted (string)
 
 Example response format:
 {
   "title": "Senior Software Engineer",
-  "skills": "JavaScript, React, Node.js, TypeScript, AWS, Docker, Kubernetes"
+  "skills": "JavaScript, React, Node.js, TypeScript, AWS, Docker, Kubernetes",
+  "companyName": "TechCorp Inc.",
+  "companyDescription": "Leading technology company specializing in cloud solutions and enterprise software development",
+  "url": "https://techcorp.com/careers/senior-engineer",
+  "source": "LinkedIn"
 }
 
-Please be concise and focus on the most important technical skills mentioned in the job description.
+Please be concise and focus on the most important information. If any information is not available in the job description, use appropriate default values.
 `;
 
     try {
@@ -474,7 +494,7 @@ Please be concise and focus on the most important technical skills mentioned in 
             {
               role: 'system',
               content:
-                'You are a job description analyzer. Extract the job title and key technical skills from job descriptions.',
+                'You are a job description analyzer. Extract comprehensive information including job title, skills, company details, URL, and source from job descriptions.',
             },
             {
               role: 'user',
@@ -494,19 +514,39 @@ Please be concise and focus on the most important technical skills mentioned in 
       const jsonData = DocxUtils.extractJSON(
         res.data.choices[0].message.content,
       );
-      console.log('✅ Title and skills extracted successfully');
+      console.log('✅ Job information extracted successfully');
 
       return {
         title: jsonData.title || 'Unknown Position',
         skills: jsonData.skills || 'No skills specified',
+        companyName: jsonData.companyName || 'Unknown Company',
+        companyDescription:
+          jsonData.companyDescription || 'No company description available',
+        url: jsonData.url || '',
+        source: jsonData.source || 'Unknown Source',
       };
     } catch (error) {
-      console.error('❌ Error extracting title and skills:', error.message);
+      console.error('❌ Error extracting job information:', error.message);
       // Return default values if extraction fails
       return {
         title: 'Unknown Position',
         skills: 'No skills specified',
+        companyName: 'Unknown Company',
+        companyDescription: 'No company description available',
+        url: '',
+        source: 'Unknown Source',
       };
     }
+  }
+
+  static async extractJobInformation(jobDescription: string): Promise<{
+    title: string;
+    skills: string;
+    companyName: string;
+    companyDescription: string;
+    url: string;
+    source: string;
+  }> {
+    return this.extractTitleAndSkillsFromJobDescription(jobDescription);
   }
 }
