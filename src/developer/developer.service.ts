@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Developer } from '../entities/developer.entity';
-import * as fs from 'fs';
+import { DocxUtils } from '../utils/docx.utils';
 import * as path from 'path';
 import { FirebaseStorageService } from '../services/firebase-storage.service';
 
@@ -20,17 +20,20 @@ export class DeveloperService {
     resumeFile?: Express.Multer.File,
   ): Promise<Developer> {
     let resumeUrl = '';
+    let information = '';
 
     // Handle resume file upload if provided
     if (resumeFile) {
       resumeUrl = await this.saveResumeFile(resumeFile);
+      information = await this.extractTextFromResumeFile(resumeFile);
     }
 
-    // Create developer with resume link
+    // Create developer with resume link and extracted information
     const developer = this.developerRepository.create({
       name,
       userId,
       link: resumeUrl,
+      information,
     });
 
     return this.developerRepository.save(developer);
@@ -52,6 +55,26 @@ export class DeveloperService {
     );
 
     return fileUrl;
+  }
+
+  private async extractTextFromResumeFile(
+    file: Express.Multer.File,
+  ): Promise<string> {
+    try {
+      // Only handle DOCX files
+      const fileExtension = path.extname(file.originalname).toLowerCase();
+
+      if (fileExtension !== '.docx') {
+        return 'Only DOCX files are supported for text extraction';
+      }
+
+      // Extract text directly from file buffer using DocxUtils
+      const extractedText = DocxUtils.extractTextFromFileBuffer(file.buffer);
+      return extractedText;
+    } catch (error) {
+      console.error('Error extracting text from DOCX file:', error.message);
+      return 'Unable to extract text from DOCX file';
+    }
   }
 
   async getDevelopersByUserId(userId: string): Promise<Developer[]> {
@@ -96,7 +119,10 @@ export class DeveloperService {
     // Handle resume file upload if provided
     if (resumeFile) {
       const resumeUrl = await this.saveResumeFile(resumeFile);
+      const information = await this.extractTextFromResumeFile(resumeFile);
+
       updateData.link = resumeUrl;
+      updateData.information = information;
     }
 
     // Update the developer with new data

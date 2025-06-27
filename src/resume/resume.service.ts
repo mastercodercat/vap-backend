@@ -79,22 +79,25 @@ export class ResumeService {
     const pdfName = `${fileName}.pdf`;
     const pdfPath = path.join(tempDir, pdfName);
 
-    // Use developer.link if available, otherwise use empty string
-    const resumePath = developer.link || '';
+    // Extract information from original resume if available
+    let extractedInformation = developer.information;
 
-    const finished = await DocxUtils.generateResume(
+    const result = await DocxUtils.generateResume(
       jobDescription,
-      resumePath,
+      developer.link || '', // Original resume URL for template
+      extractedInformation, // Extracted text content
       docType === 'pdf',
       docxPath,
       pdfPath,
+      this.firebaseStorageService, // Pass Firebase Storage service
+      developer.id, // Pass developer ID
     );
 
-    if (!finished) {
+    if (!result.success) {
       throw new Error('Failed to generate resume');
     }
 
-    // Upload files to Firebase Storage
+    // Upload DOCX file to Firebase Storage
     const docxStoragePath = this.firebaseStorageService.generateStoragePath(
       developer.id,
       docxName,
@@ -103,18 +106,6 @@ export class ResumeService {
       docxPath,
       docxStoragePath,
     );
-
-    let pdfUrl: string | undefined;
-    if (docType === 'pdf') {
-      const pdfStoragePath = this.firebaseStorageService.generateStoragePath(
-        developer.id,
-        pdfName,
-      );
-      pdfUrl = await this.firebaseStorageService.uploadFile(
-        pdfPath,
-        pdfStoragePath,
-      );
-    }
 
     // Clean up temporary files
     try {
@@ -128,7 +119,7 @@ export class ResumeService {
 
     return {
       resumeUrl: docxUrl,
-      pdfUrl,
+      pdfUrl: result.pdfUrl,
     };
   }
 
@@ -193,23 +184,20 @@ export class ResumeService {
     const pdfName = `${fileName}.pdf`;
     const pdfPath = path.join(tempDir, pdfName);
 
-    // Convert DOCX to PDF
-    await DocxUtils.generatePDF(docxPath, pdfPath);
-
-    // Upload PDF to Firebase Storage
-    const pdfStoragePath = this.firebaseStorageService.generateStoragePath(
-      resume.developerId,
-      pdfName,
-    );
-    const pdfUrl = await this.firebaseStorageService.uploadFile(
+    // Convert DOCX to PDF and upload to Firebase Storage
+    const pdfUrl = await DocxUtils.generatePDF(
+      docxPath,
       pdfPath,
-      pdfStoragePath,
+      this.firebaseStorageService,
+      resume.developerId,
     );
 
     // Clean up temporary files
     try {
       fs.unlinkSync(docxPath);
-      fs.unlinkSync(pdfPath);
+      if (fs.existsSync(pdfPath)) {
+        fs.unlinkSync(pdfPath);
+      }
     } catch (error) {
       console.warn('Could not delete temporary files:', error);
     }

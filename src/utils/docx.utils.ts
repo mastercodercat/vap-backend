@@ -31,6 +31,100 @@ export class DocxUtils {
     return apiKey;
   }
 
+  // Utility method to create temporary directory
+  private static ensureTempDir(): string {
+    const tempDir = path.join(process.cwd(), 'temp');
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
+    return tempDir;
+  }
+
+  // Utility method to create temporary file
+  private static createTempFile(prefix: string, extension: string): string {
+    const tempDir = this.ensureTempDir();
+    const tempFileName = `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2)}${extension}`;
+    return path.join(tempDir, tempFileName);
+  }
+
+  // Utility method to clean up temporary file
+  private static cleanupTempFile(filePath: string): void {
+    try {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    } catch (error) {
+      console.warn('Could not delete temporary file:', filePath);
+    }
+  }
+
+  // Download file from Firebase Storage URL
+  static async downloadFromFirebase(firebaseUrl: string): Promise<Buffer> {
+    try {
+      const response = await axios.get(firebaseUrl, {
+        responseType: 'arraybuffer',
+        timeout: 30000,
+      });
+      return Buffer.from(response.data);
+    } catch (error) {
+      console.error(
+        'Error downloading file from Firebase Storage:',
+        error.message,
+      );
+      throw new Error('Failed to download file from Firebase Storage');
+    }
+  }
+
+  // Extract text from DOCX buffer (reusable method)
+  static extractTextFromDocxBuffer(buffer: Buffer): string {
+    try {
+      const zip = new PizZip(buffer);
+
+      // Get the document.xml file from the DOCX
+      const documentXml = zip.file('word/document.xml');
+      if (!documentXml) {
+        throw new Error('Could not find document.xml in DOCX file');
+      }
+
+      const xmlContent = documentXml.asText();
+
+      // Extract text from XML by removing tags
+      let text = xmlContent
+        .replace(/<[^>]+>/g, ' ') // Remove XML tags
+        .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+        .trim();
+
+      return text;
+    } catch (error) {
+      console.error('Error extracting text from DOCX buffer:', error.message);
+      throw error;
+    }
+  }
+
+  // Extract text from DOCX file path (legacy support)
+  static extractTextFromDocx(filePath: string): string {
+    try {
+      const content = fs.readFileSync(filePath, 'binary');
+      return this.extractTextFromDocxBuffer(Buffer.from(content, 'binary'));
+    } catch (error) {
+      console.error('Error extracting text from DOCX file:', error.message);
+      throw error;
+    }
+  }
+
+  // Extract text from Firebase Storage URL
+  static async extractTextFromFirebaseUrl(
+    firebaseUrl: string,
+  ): Promise<string> {
+    const buffer = await this.downloadFromFirebase(firebaseUrl);
+    return this.extractTextFromDocxBuffer(buffer);
+  }
+
+  // Extract text from file buffer (for uploaded files)
+  static extractTextFromFileBuffer(buffer: Buffer): string {
+    return this.extractTextFromDocxBuffer(buffer);
+  }
+
   static async generateResumeWithGroq(
     jobDescription: string,
     originalResume: string,
@@ -69,7 +163,7 @@ Please output the full rewritten resume. Return **only** valid JSON. Return them
       const res = await axios.post(
         'https://api.groq.com/openai/v1/chat/completions',
         {
-          model: 'llama3-70b-8192', // OR "llama3-8b-8192"
+          model: 'llama3-70b-8192',
           messages: [
             {
               role: 'system',
@@ -106,12 +200,107 @@ Please output the full rewritten resume. Return **only** valid JSON. Return them
 
   static async createDocxFile(
     content: any,
-    importPath: string,
+    templateUrl: string,
     exportPath: string,
   ): Promise<string> {
-    const fileContent = fs.readFileSync(importPath, 'binary');
+    let zip: PizZip;
 
-    const zip = new PizZip(fileContent);
+    if (templateUrl && templateUrl.trim() !== '') {
+      // Use existing template file from Firebase Storage
+      if (templateUrl.startsWith('http')) {
+        try {
+          // Download template from Firebase Storage
+          const templateBuffer = await this.downloadFromFirebase(templateUrl);
+          zip = new PizZip(templateBuffer);
+          console.log('✅ Using original document as template');
+        } catch (error) {
+          console.error(
+            'Error downloading template from Firebase:',
+            error.message,
+          );
+          throw new Error('Failed to download template from Firebase Storage');
+        }
+      } else {
+        // Use local file path (legacy support)
+        const fileContent = fs.readFileSync(templateUrl, 'binary');
+        zip = new PizZip(fileContent);
+      }
+    } else {
+      // Create a basic DOCX structure from scratch
+      const basicDocxContent = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p>
+      <w:r>
+        <w:t>Name: {name}</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:r>
+        <w:t>Email: {email}</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:r>
+        <w:t>Phone: {phone}</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:r>
+        <w:t>Summary: {summary}</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:r>
+        <w:t>Experience:</w:t>
+      </w:r>
+    </w:p>
+    {#experience}
+    <w:p>
+      <w:r>
+        <w:t>{.}</w:t>
+      </w:r>
+    </w:p>
+    {/experience}
+    <w:p>
+      <w:r>
+        <w:t>Education: {education}</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:r>
+        <w:t>Skills: {skills}</w:t>
+      </w:r>
+    </w:p>
+  </w:body>
+</w:document>`;
+
+      // Create a minimal DOCX structure
+      zip = new PizZip();
+      zip.file('word/document.xml', basicDocxContent);
+      zip.file(
+        '[Content_Types].xml',
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>`,
+      );
+      zip.file(
+        '_rels/.rels',
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`,
+      );
+      zip.file(
+        'word/_rels/document.xml.rels',
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+</Relationships>`,
+      );
+    }
+
     const doc = new Docxtemplater(zip, {
       paragraphLoop: true,
       linebreaks: true,
@@ -133,14 +322,62 @@ Please output the full rewritten resume. Return **only** valid JSON. Return them
   static async generatePDF(
     importPath: string,
     exportPath: string,
+    firebaseStorageService?: any,
+    developerId?: string,
   ): Promise<string> {
     const convert = promisify(libre.convert);
-    const docxBuf = fs.readFileSync(importPath);
-    const pdfBuf = await convert(docxBuf, '.pdf', undefined);
-    fs.writeFileSync(exportPath, pdfBuf);
-    console.log('✅ Resume was transformed to the PDF file.');
 
-    return exportPath;
+    let docxBuf: Buffer;
+
+    // Handle Firebase Storage URL or local file path
+    if (importPath.startsWith('http')) {
+      // Download from Firebase Storage
+      try {
+        docxBuf = await this.downloadFromFirebase(importPath);
+        console.log(
+          '✅ Downloaded DOCX from Firebase Storage for PDF conversion',
+        );
+      } catch (error) {
+        console.error(
+          'Error downloading DOCX from Firebase Storage:',
+          error.message,
+        );
+        throw new Error(
+          'Failed to download DOCX from Firebase Storage for PDF conversion',
+        );
+      }
+    } else {
+      // Read from local file path
+      docxBuf = fs.readFileSync(importPath);
+    }
+
+    const pdfBuf = await convert(docxBuf, '.pdf', undefined);
+
+    // If Firebase Storage service is provided, upload to Firebase and return URL
+    if (firebaseStorageService && developerId) {
+      // Generate unique filename for PDF
+      const pdfFileName = `pdf-${Date.now()}-${Math.random().toString(36).substring(2)}.pdf`;
+
+      // Upload PDF buffer to Firebase Storage
+      const pdfStoragePath = firebaseStorageService.generateStoragePath(
+        developerId,
+        pdfFileName,
+      );
+
+      const pdfUrl = await firebaseStorageService.uploadBuffer(
+        pdfBuf,
+        pdfStoragePath,
+        'application/pdf',
+      );
+
+      console.log('✅ PDF uploaded to Firebase Storage');
+      return pdfUrl;
+    } else {
+      // Fallback to local file (legacy support)
+      fs.writeFileSync(exportPath, pdfBuf);
+      console.log('✅ Resume was transformed to the PDF file locally.');
+      return exportPath;
+    }
   }
 
   static extractJSON(text: string): any {
@@ -151,80 +388,24 @@ Please output the full rewritten resume. Return **only** valid JSON. Return them
     throw new Error('No JSON found in response');
   }
 
-  static extractTextFromDocx(filePath: string): string {
-    try {
-      const content = fs.readFileSync(filePath, 'binary');
-      const zip = new PizZip(content);
-
-      // Get the document.xml file from the DOCX
-      const documentXml = zip.file('word/document.xml');
-      if (!documentXml) {
-        throw new Error('Could not find document.xml in DOCX file');
-      }
-
-      const xmlContent = documentXml.asText();
-
-      // Extract text from XML by removing tags
-      // This is a simple approach - you might want to use a proper XML parser
-      let text = xmlContent
-        .replace(/<[^>]+>/g, ' ') // Remove XML tags
-        .replace(/\s+/g, ' ') // Replace multiple spaces with single space
-        .trim();
-
-      return text;
-    } catch (error) {
-      console.error('Error extracting text from DOCX:', error.message);
-      throw error;
-    }
-  }
-
   static async generateResume(
     jobDescription: string,
-    resumePath: string,
+    originalResumeUrl: string,
+    extractedInformation: string,
     isPdf: boolean,
     docxPath: string,
     pdfPath: string,
-  ): Promise<boolean> {
-    let originalResume = '';
-    let resumeFilePath = '';
-
-    try {
-      // Check if resumePath is provided and valid
-      if (resumePath && resumePath.trim() !== '') {
-        resumeFilePath = path.join(
-          process.cwd(),
-          resumePath.replace('/uploads/', 'uploads/'),
-        );
-        console.log('Resume file path:', resumeFilePath);
-
-        if (fs.existsSync(resumeFilePath)) {
-          // Check if it's a DOCX file
-          if (resumeFilePath.toLowerCase().endsWith('.docx')) {
-            originalResume = DocxUtils.extractTextFromDocx(resumeFilePath);
-            console.log('✅ Successfully extracted text from DOCX file');
-          } else {
-            // For other file types, read as text
-            originalResume = fs.readFileSync(resumeFilePath, 'utf-8');
-            console.log('✅ Successfully read existing resume file');
-          }
-        } else {
-          console.warn('Resume file not found at:', resumeFilePath);
-        }
-      } else {
-        console.warn('No resume path provided, using empty original resume');
-      }
-    } catch (error) {
-      console.warn('Could not read existing resume file:', error.message);
+    firebaseStorageService?: any,
+    developerId?: string,
+  ): Promise<{ success: boolean; pdfUrl?: string }> {
+    if (!extractedInformation) {
+      throw new Error('No resume content found');
     }
 
-    if (!originalResume) {
-      throw new Error('No resume file found');
-    }
-
-    // Uncomment the following code when you're ready to use GROQ
+    // Generate optimized resume using GROQ
     const jsonData = await DocxUtils.generateResumeWithGroq(
       jobDescription,
-      originalResume,
+      extractedInformation,
     );
 
     const experience = {};
@@ -239,12 +420,23 @@ Please output the full rewritten resume. Return **only** valid JSON. Return them
       experience,
     };
 
-    await DocxUtils.createDocxFile(formattedData, resumeFilePath, docxPath);
+    // Create DOCX file using original document as template
+    await DocxUtils.createDocxFile(formattedData, originalResumeUrl, docxPath);
+
+    let pdfUrl: string | undefined;
     if (isPdf) {
-      await DocxUtils.generatePDF(docxPath, pdfPath);
+      pdfUrl = await DocxUtils.generatePDF(
+        docxPath,
+        pdfPath,
+        firebaseStorageService,
+        developerId,
+      );
     }
 
-    return true;
+    return {
+      success: true,
+      pdfUrl,
+    };
   }
 
   static async extractTitleAndSkillsFromJobDescription(
