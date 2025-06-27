@@ -4,12 +4,14 @@ import { Repository } from 'typeorm';
 import { Developer } from '../entities/developer.entity';
 import * as fs from 'fs';
 import * as path from 'path';
+import { FirebaseStorageService } from '../services/firebase-storage.service';
 
 @Injectable()
 export class DeveloperService {
   constructor(
     @InjectRepository(Developer)
     private readonly developerRepository: Repository<Developer>,
+    private readonly firebaseStorageService: FirebaseStorageService,
   ) {}
 
   async createDeveloper(
@@ -35,22 +37,21 @@ export class DeveloperService {
   }
 
   private async saveResumeFile(file: Express.Multer.File): Promise<string> {
-    // Create uploads directory if it doesn't exist
-    const uploadsDir = path.join(process.cwd(), 'uploads', 'resumes');
-    if (!fs.existsSync(uploadsDir)) {
-      fs.mkdirSync(uploadsDir, { recursive: true });
-    }
-
     // Generate unique filename
     const fileExtension = path.extname(file.originalname);
     const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}${fileExtension}`;
-    const filePath = path.join(uploadsDir, fileName);
 
-    // Save file
-    fs.writeFileSync(filePath, file.buffer);
+    // Generate storage path for Firebase
+    const storagePath = `resumes/uploads/${fileName}`;
 
-    // Return the URL path
-    return `/uploads/resumes/${fileName}`;
+    // Upload file to Firebase Storage
+    const fileUrl = await this.firebaseStorageService.uploadBuffer(
+      file.buffer,
+      storagePath,
+      file.mimetype,
+    );
+
+    return fileUrl;
   }
 
   async getDevelopersByUserId(userId: string): Promise<Developer[]> {

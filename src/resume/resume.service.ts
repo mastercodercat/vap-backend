@@ -5,6 +5,7 @@ import { Resume } from '../entities/resume.entity';
 import { Developer } from '../entities/developer.entity';
 import { DocxUtils } from '../utils/docx.utils';
 import { ConfigService } from '@nestjs/config';
+import { FirebaseStorageService } from '../services/firebase-storage.service';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -16,6 +17,7 @@ export class ResumeService {
     @InjectRepository(Developer)
     private readonly developerRepository: Repository<Developer>,
     private readonly configService: ConfigService,
+    private readonly firebaseStorageService: FirebaseStorageService,
   ) {
     // Initialize DocxUtils with config service
     DocxUtils.initialize(this.configService);
@@ -64,18 +66,18 @@ export class ResumeService {
     developer: Developer,
     docType: 'pdf' | 'docx',
   ): Promise<{ resumeUrl: string; pdfUrl: string | undefined }> {
-    // Create uploads directory if it doesn't exist
-    const uploadsDir = path.join(process.cwd(), 'uploads', 'generated');
-    if (!fs.existsSync(uploadsDir)) {
-      fs.mkdirSync(uploadsDir, { recursive: true });
+    // Create temporary directory for file processing
+    const tempDir = path.join(process.cwd(), 'temp');
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
     }
 
     // Generate unique filename
     const fileName = `auto-resume-${developer.id}-${Date.now()}`;
     const docxName = `${fileName}.docx`;
-    const docxPath = path.join(uploadsDir, docxName);
+    const docxPath = path.join(tempDir, docxName);
     const pdfName = `${fileName}.pdf`;
-    const pdfPath = path.join(uploadsDir, pdfName);
+    const pdfPath = path.join(tempDir, pdfName);
 
     // Use developer.link if available, otherwise use empty string
     const resumePath = developer.link || '';
@@ -92,17 +94,42 @@ export class ResumeService {
       throw new Error('Failed to generate resume');
     }
 
+    // Upload files to Firebase Storage
+    const docxStoragePath = this.firebaseStorageService.generateStoragePath(
+      developer.id,
+      docxName,
+    );
+    const docxUrl = await this.firebaseStorageService.uploadFile(
+      docxPath,
+      docxStoragePath,
+    );
+
+    let pdfUrl: string | undefined;
     if (docType === 'pdf') {
-      return {
-        resumeUrl: `/uploads/generated/${docxName}`,
-        pdfUrl: `/uploads/generated/${pdfName}`,
-      };
-    } else {
-      return {
-        resumeUrl: `/uploads/generated/${docxName}`,
-        pdfUrl: undefined,
-      };
+      const pdfStoragePath = this.firebaseStorageService.generateStoragePath(
+        developer.id,
+        pdfName,
+      );
+      pdfUrl = await this.firebaseStorageService.uploadFile(
+        pdfPath,
+        pdfStoragePath,
+      );
     }
+
+    // Clean up temporary files
+    try {
+      fs.unlinkSync(docxPath);
+      if (docType === 'pdf' && fs.existsSync(pdfPath)) {
+        fs.unlinkSync(pdfPath);
+      }
+    } catch (error) {
+      console.warn('Could not delete temporary files:', error);
+    }
+
+    return {
+      resumeUrl: docxUrl,
+      pdfUrl,
+    };
   }
 
   async getResumesByDeveloperId(developerId: string): Promise<Resume[]> {
@@ -147,27 +174,58 @@ export class ResumeService {
       return resume; // PDF already exists, return as is
     }
 
-    // Get the DOCX file path
-    const docxPath = path.join(
-      process.cwd(),
-      resume.resumeUrl.replace('/uploads/', 'uploads/'),
-    );
-
-    if (!fs.existsSync(docxPath)) {
-      throw new NotFoundException('DOCX file not found');
+    // Create temporary directory
+    const tempDir = path.join(process.cwd(), 'temp');
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
     }
+
+    // Download DOCX file from Firebase Storage
+    const docxFileName = `temp-docx-${Date.now()}.docx`;
+    const docxPath = path.join(tempDir, docxFileName);
+
+    // Extract storage path from URL
+    const storagePath = this.extractStoragePathFromUrl(resume.resumeUrl);
+    await this.firebaseStorageService.downloadFile(storagePath, docxPath);
 
     // Generate PDF file path
     const fileName = path.basename(docxPath, '.docx');
     const pdfName = `${fileName}.pdf`;
-    const pdfPath = path.join(path.dirname(docxPath), pdfName);
+    const pdfPath = path.join(tempDir, pdfName);
 
     // Convert DOCX to PDF
     await DocxUtils.generatePDF(docxPath, pdfPath);
 
+    // Upload PDF to Firebase Storage
+    const pdfStoragePath = this.firebaseStorageService.generateStoragePath(
+      resume.developerId,
+      pdfName,
+    );
+    const pdfUrl = await this.firebaseStorageService.uploadFile(
+      pdfPath,
+      pdfStoragePath,
+    );
+
+    // Clean up temporary files
+    try {
+      fs.unlinkSync(docxPath);
+      fs.unlinkSync(pdfPath);
+    } catch (error) {
+      console.warn('Could not delete temporary files:', error);
+    }
+
     // Update the resume with PDF URL
-    resume.pdfUrl = `/uploads/generated/${pdfName}`;
+    resume.pdfUrl = pdfUrl;
 
     return this.resumeRepository.save(resume);
+  }
+
+  private extractStoragePathFromUrl(url: string): string {
+    // Extract storage path from Firebase Storage URL
+    // URL format: https://storage.googleapis.com/BUCKET_NAME/path/to/file
+    const urlParts = url.split('/');
+    const bucketNameIndex =
+      urlParts.findIndex((part) => part.includes('storage.googleapis.com')) + 1;
+    return urlParts.slice(bucketNameIndex + 1).join('/');
   }
 }

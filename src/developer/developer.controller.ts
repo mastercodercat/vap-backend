@@ -24,6 +24,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { DeveloperService } from './developer.service';
 import { UpdateDeveloperDto } from './dto/update-developer.dto';
+import { DocxUtils } from 'src/utils/docx.utils';
 
 @ApiTags('Developers')
 @ApiBearerAuth()
@@ -67,6 +68,7 @@ export class DeveloperController {
       id: developer.id,
       name: developer.name,
       link: developer.link,
+      // information: resumeText,
       createdAt: developer.createdAt,
     };
   }
