@@ -19,4 +19,14 @@ export class UpdateDeveloperDto {
   @IsOptional()
   @IsUrl()
   link?: string;
+
+  @ApiProperty({
+    description: 'Developer information/bio',
+    example:
+      'Full-stack developer with 5 years of experience in React and Node.js',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  information?: string;
 }

@@ -68,7 +68,7 @@ export class DeveloperController {
       id: developer.id,
       name: developer.name,
       link: developer.link,
-      // information: resumeText,
+      information: developer.information,
       createdAt: developer.createdAt,
     };
   }
@@ -111,6 +111,7 @@ export class DeveloperController {
       id: developer.id,
       name: developer.name,
       link: developer.link,
+      information: developer.information,
       createdAt: developer.createdAt,
       updatedAt: developer.updatedAt,
     };
@@ -131,6 +132,7 @@ export class DeveloperController {
       id: developer.id,
       name: developer.name,
       link: developer.link,
+      information: developer.information,
       createdAt: developer.createdAt,
     }));
   }
@@ -147,6 +149,7 @@ export class DeveloperController {
       id: developer.id,
       name: developer.name,
       link: developer.link,
+      information: developer.information,
       createdAt: developer.createdAt,
     };
   }

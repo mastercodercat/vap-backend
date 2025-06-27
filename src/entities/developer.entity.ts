@@ -22,6 +22,9 @@ export class Developer {
   @Column({ type: 'varchar', length: 500 })
   link: string;
 
+  @Column({ type: 'text', nullable: true })
+  information: string;
+
   @Column({ type: 'uuid' })
   userId: string;
 
