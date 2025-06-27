@@ -12,7 +12,7 @@ export const getDatabaseConfig = (
   database: configService.get('DB_NAME', 'vap'),
   entities: [__dirname + '/../**/*.entity{.ts,.js}'],
   migrations: [__dirname + '/../migrations/*{.ts,.js}'],
-  synchronize: false, // Disable auto-sync for better control
+  synchronize: false, // Always false for production safety
   logging: configService.get('NODE_ENV') !== 'production',
   ssl:
     configService.get('NODE_ENV') === 'production'
